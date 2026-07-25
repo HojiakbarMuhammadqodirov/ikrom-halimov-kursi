@@ -12,8 +12,13 @@ export function loadState() {
     if (!raw) return initialState;
     const parsed = JSON.parse(raw);
     // If the seed shape has changed (e.g. new fields), merge with initialState
-    // so we don't crash on stale data.
-    return { ...initialState, ...parsed };
+    // so we don't crash on stale data. `settings` is merged one level deeper so
+    // newly-added setting keys are always present even on old saved data.
+    return {
+      ...initialState,
+      ...parsed,
+      settings: { ...initialState.settings, ...(parsed.settings || {}) },
+    };
   } catch (err) {
     console.warn('Failed to load state, using seed.', err);
     return initialState;

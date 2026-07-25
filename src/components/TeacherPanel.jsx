@@ -16,7 +16,7 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
     const student = state.students.find((s) => s.id === selectedStudentId);
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title={student?.fullName} backLabel="Orqaga" onBack={() => setSelectedStudentId(null)}>
             <StudentDetail state={state} setState={setState} student={student} />
@@ -30,7 +30,7 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
   if (page === 'attendance') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Davomat" backLabel="Dashboard" onBack={() => setPage(null)}>
             <AttendanceTab state={state} setState={setState} onSelect={setSelectedStudentId} />
@@ -43,7 +43,7 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
   if (page === 'results') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Test natijalari" backLabel="Dashboard" onBack={() => setPage(null)}>
             <ResultsTab state={state} onSelect={setSelectedStudentId} />
@@ -56,7 +56,7 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
   if (page === 'payments') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Oylik to'lovlar" backLabel="Dashboard" onBack={() => setPage(null)}>
             <PaymentsTab state={state} setState={setState} onSelect={setSelectedStudentId} />
@@ -69,7 +69,7 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
   if (page === 'students') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="O'quvchilar bilan ishlash" backLabel="Dashboard" onBack={() => setPage(null)}>
             <StudentsTab state={state} setState={setState} onSelect={setSelectedStudentId} />
@@ -89,7 +89,7 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
 
   return (
     <div className="dashboard">
-      <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+      <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
 
       <div className="dashboard-hero">
         <div className="dash-role-badge">O'qituvchi paneli</div>
@@ -105,8 +105,8 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
             icon={IconAttendance}
             title="Davomat"
             subtitle="Kunlik davomatni belgilash — kelgan, kechikkan va kelmagan o'quvchilar"
-            stat={pendingAttendance > 0 ? `${pendingAttendance} ta` : 'Barchasi belgilandi'}
-            foot={pendingAttendance > 0 ? 'belgilanmagan' : '✅'}
+            stat={pendingAttendance > 0 ? `${pendingAttendance} ta` : 'Tayyor'}
+            foot={pendingAttendance > 0 ? 'belgilanmagan' : 'barchasi belgilandi'}
             onClick={() => setPage('attendance')}
             delay={80}
           />
@@ -495,14 +495,15 @@ function PaymentsTab({ state, setState, onSelect }) {
    payments, and lates inline.
    ============================================================ */
 function StudentsTab({ state, setState, onSelect }) {
+  // Hooks must run unconditionally (Rules of Hooks) — declare them before any early return.
+  const [payId, setPayId] = useState(null);
+  const [closedIds, setClosedIds] = useState(new Set());
+
   if (!state || !Array.isArray(state.students)) {
     return <div className="stud-cards" />;
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const [payId, setPayId] = useState(null);
-  const [closedIds, setClosedIds] = useState(new Set());
-
   const att = Array.isArray(state.attendance) ? state.attendance : [];
   const tResults = Array.isArray(state.testResults) ? state.testResults : [];
   const pays = Array.isArray(state.payments) ? state.payments : [];
@@ -654,7 +655,7 @@ function StudentsTab({ state, setState, onSelect }) {
                 <label className="stud-label">To'lov</label>
                 <div className="stud-inline-group">
                   <span className="stud-pay-info">
-                    {pay ? `${formatMoney(p.monthlyFee)}` : '—'}
+                    {pay ? formatMoney(pay.monthlyFee) : '—'}
                     {payDays !== null && payDays !== undefined && !isNaN(payDays) && (
                       <span className="muted" style={{ marginLeft: 6, fontSize: 11 }}>
                         {payDays >= 0 ? `${payDays} kun qoldi` : `${Math.abs(payDays)} kun kechikdi`}

@@ -19,7 +19,7 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
     const student = state.students.find((s) => s.id === viewStudentId);
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title={student?.fullName} backLabel="Orqaga" onBack={() => setViewStudentId(null)}>
             <StudentDetail state={state} setState={setState} student={student} readOnly={false} />
@@ -33,7 +33,7 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
   if (page === 'overview') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Umumiy ko'rinish" backLabel="Dashboard" onBack={() => setPage(null)}>
             <Overview state={state} />
@@ -46,7 +46,7 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
   if (page === 'students') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="O'quvchilar" backLabel="Dashboard" onBack={() => setPage(null)}>
             <StudentsTab state={state} setState={setState} onView={(id) => setViewStudentId(id)} />
@@ -59,7 +59,7 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
   if (page === 'teachers') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="O'qituvchilar" backLabel="Dashboard" onBack={() => setPage(null)}>
             <TeachersTab state={state} setState={setState} />
@@ -72,7 +72,7 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
   if (page === 'settings') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Kurs sozlamalari" backLabel="Dashboard" onBack={() => setPage(null)}>
             <SettingsTab state={state} setState={setState} />
@@ -107,7 +107,7 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
 
   return (
     <div className="dashboard">
-      <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+      <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
 
       <div className="dashboard-hero">
         <div className="dash-role-badge">Administrator paneli</div>
@@ -276,7 +276,7 @@ function Overview({ state }) {
               <div style={{ flex: 1 }}>
                 <ProgressBar value={avg} variant={avg >= 70 ? 'ok' : avg >= 50 ? 'warn' : 'bad'} />
               </div>
-              <div style={{ fontFamily: 'Fraunces, serif', fontSize: 22, letterSpacing: '-0.02em', minWidth: 56, textAlign: 'right' }}>{avg}%</div>
+              <div className="num-display" style={{ fontSize: 22, minWidth: 56, textAlign: 'right' }}>{avg}%</div>
             </div>
           );
         })}

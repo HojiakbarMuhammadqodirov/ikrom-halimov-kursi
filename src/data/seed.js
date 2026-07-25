@@ -10,14 +10,14 @@ export const SUBJECTS = {
     id: 'fizika',
     label: 'Fizika',
     glyph: 'π',
-    accent: '#b3461e',       // terracotta
+    accent: '#0f9d76',       // emerald (brand accent)
     subtopics: ['Mexanika', 'Elektrodinamika', 'Optika', 'Termodinamika'],
   },
   matematika: {
     id: 'matematika',
     label: 'Matematika',
     glyph: '∫',
-    accent: '#1a4dff',       // deep ink-blue (only for charts/lines, never chrome)
+    accent: '#4d5bce',       // muted indigo (chart/line distinction only)
     subtopics: ['Algebra', 'Geometriya', 'Trigonometriya', 'Hosila va integral'],
   },
 };
@@ -75,7 +75,9 @@ const users = [admin, teacher, ...students];
 
 const settings = {
   monthlyFee: 500000, // so'm
-  nextTestDate: addDays(new Date(), 9), // 9 days from "now" — countdown will be visible
+  // Stored as an ISO string (not a Date object) so it survives JSON round-trips
+  // and the admin Settings page can safely call .slice() on it on a fresh load.
+  nextTestDate: addDays(new Date(), 9).toISOString(), // 9 days from "now"
   courseName: 'Ikrom Halimov kursi — Fizika & Matematika',
 };
 

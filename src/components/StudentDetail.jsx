@@ -22,13 +22,16 @@ export default function StudentDetail({ state, setState, student, readOnly = fal
   const topicStats = useMemo(() => {
     const stats = {};
     state.topics.forEach((t) => {
-      stats[t] = { subject: findSubjectForTopic(state, t), correct: 0, total: 0 };
+      stats[t] = { subject: findSubjectForTopic(state, t), correct: 0, attempted: 0 };
     });
-    state.questions.forEach((q) => { stats[q.topic].total += 1; });
+    // Count every answered question across all of this student's results, so the
+    // denominator is the number of times a topic was actually attempted — not
+    // (questions-in-topic × total-results), which double-counted the other subject.
     studentResults.forEach((r) => {
       Object.keys(r.answers || {}).forEach((qid) => {
         const q = state.questions.find((x) => x.id === qid);
-        if (!q) return;
+        if (!q || !stats[q.topic]) return;
+        stats[q.topic].attempted += 1;
         if (r.answers[qid] === q.answer) stats[q.topic].correct += 1;
       });
     });
@@ -124,7 +127,7 @@ export default function StudentDetail({ state, setState, student, readOnly = fal
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 4" stroke="rgba(20, 23, 28, 0.08)" />
+                  <CartesianGrid strokeDasharray="3 4" stroke="var(--line)" />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--ink-faint)' }} stroke="var(--ink-faint)" />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--ink-faint)' }} stroke="var(--ink-faint)" />
                   <Tooltip
@@ -169,8 +172,7 @@ export default function StudentDetail({ state, setState, student, readOnly = fal
                 </div>
                 {topics.map((topic) => {
                   const st = topicStats[topic];
-                  const totalAttempts = st.total * studentResults.length;
-                  const pct = totalAttempts === 0 ? 0 : Math.round((st.correct / totalAttempts) * 100);
+                  const pct = st.attempted === 0 ? 0 : Math.round((st.correct / st.attempted) * 100);
                   const variant = pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad';
                   return (
                     <div className="topic-row" key={topic}>

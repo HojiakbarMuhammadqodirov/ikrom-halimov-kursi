@@ -367,41 +367,157 @@ export function EmptyState({ art: Art, title, hint }) {
   );
 }
 
-export function Header({ title, user, onLogout, right, theme = 'light', onToggleTheme }) {
+const ROLE_LABELS = { admin: 'Administrator', teacher: "O'qituvchi", student: "O'quvchi" };
+
+export function Header({ title, user, onLogout, theme = 'light', onToggleTheme, state }) {
+  const notifications = React.useMemo(
+    () => (state ? getNotifications(state, user) : []),
+    [state, user]
+  );
   return (
     <header className="floating-header">
       <div className="floating-header-inner">
         <div className="brand">
-          <div className="brand-mark">I</div>
-          {title}
+          <div className="brand-mark" aria-hidden="true">I</div>
+          <span>{title}</span>
         </div>
-        <div className="role-pill">panel</div>
-        {right}
+        {user?.role && <div className="role-pill">{ROLE_LABELS[user.role] || 'panel'}</div>}
+
+        <span className="header-spacer" />
+
+        {state && <NotificationBell notifications={notifications} />}
+
         <button
-          className="theme-toggle"
+          className="icon-btn theme-toggle"
           onClick={onToggleTheme}
-          aria-label={theme === 'dark' ? 'Yorug\' rejim' : 'Qorong\'i rejim'}
-          title={theme === 'dark' ? 'Yorug\' rejim' : 'Qorong\'i rejim'}
+          aria-label={theme === 'dark' ? "Yorug' rejimga o'tish" : "Qorong'i rejimga o'tish"}
+          title={theme === 'dark' ? "Yorug' rejim" : "Qorong'i rejim"}
         >
           {theme === 'dark' ? (
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="10" cy="10" r="4" />
               <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41" />
             </svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M17.29 12.29A8 8 0 017.71 2.71 8 8 0 1017.29 12.29z" />
             </svg>
           )}
         </button>
+
         <div className="user-chip">
-          <div className="user-avatar-sm">{initials(user?.fullName || user?.username)}</div>
+          <div className="user-avatar-sm" aria-hidden="true">{initials(user?.fullName || user?.username)}</div>
           <span className="user-name">{user?.fullName || user?.username}</span>
         </div>
-        <button className="logout-btn" onClick={onLogout} aria-label="Chiqish">Chiqish</button>
+        <button className="logout-btn" onClick={onLogout}>Chiqish</button>
       </div>
     </header>
   );
+}
+
+export function NotificationBell({ notifications = [] }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function onEsc(e) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onEsc);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onEsc); };
+  }, [open]);
+
+  const count = notifications.length;
+
+  return (
+    <div className="notif-wrap" ref={ref}>
+      <button
+        className="icon-btn"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={`Bildirishnomalar${count ? ` (${count})` : ''}`}
+        aria-expanded={open}
+      >
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M10 2a5 5 0 00-5 5c0 4-1.5 5.5-1.5 5.5h13S15 11 15 7a5 5 0 00-5-5z" />
+          <path d="M8.5 16a1.7 1.7 0 003 0" />
+        </svg>
+        {count > 0 && <span className="notif-dot">{count > 9 ? '9+' : count}</span>}
+      </button>
+
+      {open && (
+        <div className="notif-panel" role="dialog" aria-label="Bildirishnomalar">
+          <div className="notif-head">
+            <h4>Bildirishnomalar</h4>
+            <span className="count">{count} ta</span>
+          </div>
+          {count === 0 ? (
+            <div className="notif-empty">Hozircha yangi bildirishnoma yo'q.</div>
+          ) : (
+            <div className="notif-list">
+              {notifications.map((n) => (
+                <div className="notif-item" data-tone={n.tone} key={n.id}>
+                  <span className="notif-marker" aria-hidden="true" />
+                  <div className="notif-body">
+                    <div className="notif-title">{n.title}</div>
+                    {n.desc && <div className="notif-desc">{n.desc}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Build role-aware notifications from current state.
+export function getNotifications(state, user) {
+  if (!state || !user) return [];
+  const out = [];
+  const students = state.students || [];
+  const attendance = state.attendance || [];
+  const payments = state.payments || [];
+  const results = state.testResults || [];
+
+  if (user.role === 'student') {
+    const days = daysUntil(state.settings?.nextTestDate);
+    if (Number.isFinite(days)) {
+      if (days <= 0) out.push({ id: 'n-test-now', tone: 'accent', title: 'Bugun test kuni', desc: 'Keyingi test bugun. Testlar bo\'limidan topshiring.' });
+      else if (days <= 7) out.push({ id: 'n-test-soon', tone: 'accent', title: `Keyingi testgacha ${days} kun`, desc: `Sana: ${formatDate(state.settings.nextTestDate)}. Tayyorgarlikni yakunlang.` });
+    }
+    const myAtt = attendance.filter((a) => a.studentId === user.id).slice(-20);
+    if (myAtt.length) {
+      const present = myAtt.filter((a) => a.status === 'present' || a.status === 'late').length;
+      const rate = Math.round((present / myAtt.length) * 100);
+      if (rate < 70) out.push({ id: 'n-att', tone: 'warn', title: `Davomat ${rate}%`, desc: 'Davomatingiz pasaymoqda — darslarni qoldirmang.' });
+    }
+    const pay = payments.find((p) => p.studentId === user.id);
+    if (pay) {
+      const left = daysUntil(pay.nextDue);
+      if (pay.status === 'overdue' || left < 0) out.push({ id: 'n-pay', tone: 'bad', title: "To'lov muddati o'tgan", desc: `Oxirgi muddat: ${formatDate(pay.nextDue)}.` });
+      else if (left <= 5) out.push({ id: 'n-pay', tone: 'warn', title: "To'lov yaqinlashdi", desc: `${left} kun ichida to'lov muddati: ${formatDate(pay.nextDue)}.` });
+    }
+    const mine = results.filter((r) => r.studentId === user.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (mine[0]) {
+      out.push({ id: 'n-last', tone: mine[0].score >= 70 ? 'ok' : 'accent', title: `So'nggi test natijasi: ${mine[0].score}%`, desc: `${mine[0].correctCount}/${mine[0].total} to'g'ri javob.` });
+    }
+  } else {
+    // teacher / admin
+    const today = new Date().toISOString().slice(0, 10);
+    const pending = students.filter((s) => !attendance.find((a) => a.studentId === s.id && a.date === today)).length;
+    if (pending > 0) out.push({ id: 'n-att-pending', tone: 'accent', title: `${pending} o'quvchi davomati belgilanmagan`, desc: 'Bugungi davomatni belgilashni unutmang.' });
+    const overdue = payments.filter((p) => p.status === 'overdue');
+    if (overdue.length) out.push({ id: 'n-overdue', tone: 'bad', title: `${overdue.length} ta to'lov muddati o'tgan`, desc: "To'lovlar bo'limidan tekshiring." });
+    const dueSoon = payments.filter((p) => p.status === 'due_soon');
+    if (dueSoon.length) out.push({ id: 'n-duesoon', tone: 'warn', title: `${dueSoon.length} ta to'lov yaqinlashdi`, desc: 'Yaqin kunlarda to\'lov kutilmoqda.' });
+    const testDays = daysUntil(state.settings?.nextTestDate);
+    if (Number.isFinite(testDays) && testDays >= 0 && testDays <= 7) {
+      out.push({ id: 'n-test', tone: 'accent', title: `Keyingi testgacha ${testDays} kun`, desc: `Sana: ${formatDate(state.settings.nextTestDate)}.` });
+    }
+  }
+  return out;
 }
 
 export function Stat({ label, value, foot, eyebrow }) {

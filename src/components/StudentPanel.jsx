@@ -58,7 +58,7 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
     const t = state.tests.find((x) => x.id === runningTestId);
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <button className="btn btn-ghost" onClick={() => setRunningTestId(null)}>← Testlarga qaytish</button>
           <TestRunner
@@ -77,7 +77,7 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   if (page === 'home') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Bosh sahifa" backLabel="Dashboard" onBack={() => setPage(null)}>
             <HomeContent
@@ -101,7 +101,7 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   if (page === 'tests') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Testlar" backLabel="Dashboard" onBack={() => setPage(null)}>
             <TestsContent tests={state.tests} onStart={(id) => setRunningTestId(id)} />
@@ -114,7 +114,7 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   if (page === 'materials') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="O'quv materiallari" backLabel="Dashboard" onBack={() => setPage(null)}>
             <MaterialsContent materials={state.materials} />
@@ -127,7 +127,7 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   if (page === 'payment') {
     return (
       <div className="dashboard">
-        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="To'lov ma'lumotlari" backLabel="Dashboard" onBack={() => setPage(null)}>
             <PaymentContent payment={payment} />
@@ -140,7 +140,7 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   // DASHBOARD
   return (
     <div className="dashboard">
-      <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} />
+      <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
 
       <div className="dashboard-hero">
         <div className="dash-role-badge">O'quvchi paneli</div>
@@ -220,7 +220,7 @@ function HomeContent({ student, myResults, perSubjectAvg, avg, attRate, state, p
           <div className="time">{days} <em>kun</em> {hours} <em>soat</em></div>
         </div>
         <div className="when">
-          <span style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(244, 241, 236, 0.55)' }}>Sana</span>
+          <span style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink-faint)' }}>Sana</span>
           <b>{formatDate(nextTest)}</b>
         </div>
         <div className="corner-art"><AtomOrbit size={120} accent="currentColor" /></div>
@@ -235,11 +235,12 @@ function HomeContent({ student, myResults, perSubjectAvg, avg, attRate, state, p
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 18, marginBottom: 22 }}>
             <div style={{
-              fontFamily: 'Fraunces, serif',
-              fontSize: 'clamp(56px, 7vw, 96px)',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 'clamp(52px, 7vw, 88px)',
+              fontWeight: 800,
               lineHeight: 1,
               letterSpacing: '-0.04em',
-              fontVariationSettings: '"opsz" 144',
+              fontVariantNumeric: 'tabular-nums',
               color: 'var(--ink)',
             }}>{avg}%</div>
             <div style={{ color: 'var(--ink-soft)', fontSize: 14, maxWidth: '24ch', lineHeight: 1.5 }}>
@@ -260,9 +261,8 @@ function HomeContent({ student, myResults, perSubjectAvg, avg, attRate, state, p
                       variant={v === null ? 'neutral' : (v >= 70 ? 'ok' : v >= 50 ? 'warn' : 'bad')}
                     />
                   </div>
-                  <div style={{
-                    fontFamily: 'Fraunces, serif', fontSize: 28, fontWeight: 500,
-                    letterSpacing: '-0.02em', minWidth: 64, textAlign: 'right',
+                  <div className="num-display" style={{
+                    fontSize: 26, minWidth: 64, textAlign: 'right',
                     color: v === null ? 'var(--ink-faint)' : 'var(--ink)',
                   }}>
                     {v === null ? '—' : `${v}%`}
