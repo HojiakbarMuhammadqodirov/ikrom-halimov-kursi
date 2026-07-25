@@ -2,11 +2,14 @@ import React, { useMemo, useState } from 'react';
 import {
   Header, Section, SubjectChip, ProgressBar, Sparkline, EmptyState, ShellCard, Modal,
   NavCard, Page,
-  IconAttendance, IconResults, IconPayments, IconStudents,
+  IconAttendance, IconResults, IconPayments, IconStudents, IconTests,
   formatDate, formatMoney, daysUntil, Pill, initials,
 } from './shared.jsx';
 import { SUBJECTS } from '../data/seed.js';
 import StudentDetail from './StudentDetail.jsx';
+import TestBuilder from './TestBuilder.jsx';
+import TestResultsView from './TestResultsView.jsx';
+import { isTestOpen, testStatus, cadenceLabel } from '../lib/tests.js';
 
 export default function TeacherPanel({ state, setState, user, onLogout, theme, onToggleTheme }) {
   const [page, setPage] = useState(null);
@@ -79,6 +82,19 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
     );
   }
 
+  if (page === 'testbank') {
+    return (
+      <div className="dashboard">
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
+        <main className="main">
+          <Page title="Testlar" backLabel="Dashboard" onBack={() => setPage(null)}>
+            <TestsManager state={state} setState={setState} user={user} />
+          </Page>
+        </main>
+      </div>
+    );
+  }
+
   // DASHBOARD
   const today = new Date().toISOString().slice(0, 10);
   const pendingAttendance = state.students.filter(
@@ -86,6 +102,7 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
   ).length;
   const overduePayments = state.payments.filter((p) => p.status === 'overdue').length;
   const totalStudents = state.students.length;
+  const openTests = state.tests.filter((t) => isTestOpen(t)).length;
 
   return (
     <div className="dashboard">
@@ -112,13 +129,23 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
           />
 
           <NavCard
+            icon={IconTests}
+            title="Testlar"
+            subtitle="Yangi test qo'shish, ochish/yopish va har bir test natijalari"
+            stat={`${state.tests.length} ta`}
+            foot={openTests > 0 ? `${openTests} ta ochiq` : 'barchasi yopiq'}
+            onClick={() => setPage('testbank')}
+            delay={140}
+          />
+
+          <NavCard
             icon={IconResults}
             title="Test natijalari"
             subtitle="So'nggi test natijalari, o'zgarish dinamikasi va o'rtacha ballar"
             stat={`${state.testResults.length} ta`}
             foot="barcha natijalar"
             onClick={() => setPage('results')}
-            delay={160}
+            delay={200}
           />
 
           <NavCard
@@ -715,5 +742,117 @@ function StudentsTab({ state, setState, onSelect }) {
         )}
       </Modal>
     </div>
+  );
+}
+
+/* ============================================================
+   TEST MANAGER — create tests, open/close, view per-test results
+   ============================================================ */
+function TestsManager({ state, setState, user }) {
+  const [view, setView] = useState('list');   // 'list' | 'new' | 'results'
+  const [selId, setSelId] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+
+  if (view === 'new') {
+    return <TestBuilder state={state} setState={setState} user={user} onDone={() => setView('list')} />;
+  }
+
+  if (view === 'results') {
+    const test = state.tests.find((t) => t.id === selId);
+    if (!test) return <div className="muted">Test topilmadi.</div>;
+    return (
+      <div className="stack-lg">
+        <button className="btn btn-ghost" onClick={() => setView('list')}>&larr; Testlar ro'yxati</button>
+        <TestResultsView state={state} test={test} />
+      </div>
+    );
+  }
+
+  function setManual(testId, value) {
+    setState((s) => ({ ...s, tests: s.tests.map((t) => t.id === testId ? { ...t, manualOpen: value } : t) }));
+  }
+  function doDelete(testId) {
+    setState((s) => ({
+      ...s,
+      tests: s.tests.filter((t) => t.id !== testId),
+      questions: s.questions.filter((q) => q.testId !== testId),   // keep shared seed questions (no testId)
+      testResults: s.testResults.filter((r) => r.testId !== testId),
+    }));
+    setDeleteId(null);
+  }
+
+  const tests = [...state.tests].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const target = deleteId ? state.tests.find((t) => t.id === deleteId) : null;
+
+  return (
+    <Section
+      title=""
+      action={<button className="btn btn-primary btn-sm" onClick={() => setView('new')}>+ Yangi test</button>}
+    >
+      {tests.length === 0 ? (
+        <div className="empty-state" style={{ padding: '32px 20px' }}>
+          <h3>Hali test yo'q</h3>
+          <p>"Yangi test" tugmasi orqali birinchi testingizni yarating.</p>
+        </div>
+      ) : (
+        <div className="tm-list">
+          {tests.map((t) => {
+            const status = testStatus(t);
+            const open = status.key === 'open';
+            const attempts = state.testResults.filter((r) => r.testId === t.id).length;
+            const scheduledInfo = t.availability === 'scheduled' && t.openAt && t.manualOpen == null && !open;
+            return (
+              <div className="tm-card" key={t.id}>
+                <div className="tm-main">
+                  <div className="tm-code">{t.code}</div>
+                  <div className="tm-title">{t.title}</div>
+                  <div className="tm-meta">
+                    <SubjectChip subject={t.subject} />
+                    <span className="tiny">{cadenceLabel(t.cadence)}</span>
+                    <span className="tiny">· {(t.questionIds || []).length} savol</span>
+                    <span className="tiny">· {attempts} topshirish</span>
+                    {scheduledInfo && <span className="tiny">· {formatDateTime(t.openAt)} da ochiladi</span>}
+                  </div>
+                </div>
+                <div className="tm-side">
+                  <span className={`stud-badge ${status.tone === 'ok' ? 'green' : status.tone === 'warn' ? 'amber' : 'red'}`}>{status.label}</span>
+                  <div className="td-actions">
+                    {open ? (
+                      <button className="btn btn-sm" onClick={() => setManual(t.id, false)}>Yopish</button>
+                    ) : (
+                      <button className="btn btn-sm btn-primary" onClick={() => setManual(t.id, true)}>Ochish</button>
+                    )}
+                    {t.manualOpen != null && t.availability !== 'immediate' && (
+                      <button className="btn btn-sm" onClick={() => setManual(t.id, null)}>Avto</button>
+                    )}
+                    <button className="btn btn-sm" onClick={() => { setSelId(t.id); setView('results'); }}>Natijalar</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => setDeleteId(t.id)}>O'chirish</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Modal
+        open={!!target}
+        onClose={() => setDeleteId(null)}
+        title="Testni o'chirish"
+        actions={
+          <>
+            <button className="btn btn-ghost" onClick={() => setDeleteId(null)}>Bekor qilish</button>
+            <button className="btn btn-danger" onClick={() => doDelete(deleteId)}>O'chirish</button>
+          </>
+        }
+      >
+        {target && (
+          <p>
+            <b>{target.title}</b> ({target.code}) o'chirilsinmi? Bu test va unga tegishli
+            savollar hamda natijalar butunlay o'chiriladi. Bu amalni ortga qaytarib bo'lmaydi.
+          </p>
+        )}
+      </Modal>
+    </Section>
   );
 }

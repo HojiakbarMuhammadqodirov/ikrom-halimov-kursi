@@ -3,11 +3,12 @@ import {
   Header, Section, Sparkline, ProgressBar, SubjectChip, EmptyState, ShellCard,
   NavCard, Page, HeaderTimer,
   IconHome, IconTests, IconMaterials, IconPayment,
-  formatDate, formatMoney, daysUntil, Pill, initials,
+  formatDate, formatDateTime, formatMoney, daysUntil, Pill, initials,
 } from './shared.jsx';
 import { SUBJECTS } from '../data/seed.js';
 import TestRunner from './TestRunner.jsx';
 import { Pythagorean, AtomOrbit, Blackboard } from './SubjectArt.jsx';
+import { isTestOpen, testStatus } from '../lib/tests.js';
 
 export default function StudentPanel({ state, setState, user, onLogout, theme, onToggleTheme }) {
   const student = state.students.find((s) => s.id === user.id);
@@ -53,6 +54,11 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   const attendance = state.attendance.filter((a) => a.studentId === student.id);
   const attRate = attendance.length === 0 ? 0
     : Math.round((attendance.filter((a) => a.status === 'present' || a.status === 'late').length / attendance.length) * 100);
+
+  // Tests this student can see: only those for a subject they're enrolled in.
+  const mySubjects = student.subjects && student.subjects.length ? student.subjects : Object.keys(SUBJECTS);
+  const myTests = state.tests.filter((t) => mySubjects.includes(t.subject));
+  const availableTests = myTests.filter((t) => isTestOpen(t));
 
   if (runningTestId) {
     const t = state.tests.find((x) => x.id === runningTestId);
@@ -104,7 +110,10 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
         <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
         <main className="main">
           <Page title="Testlar" backLabel="Dashboard" onBack={() => setPage(null)}>
-            <TestsContent tests={state.tests} onStart={(id) => setRunningTestId(id)} />
+            <TestsContent
+              tests={myTests}
+              onStart={(id) => { const t = state.tests.find((x) => x.id === id); if (t && isTestOpen(t)) setRunningTestId(id); }}
+            />
           </Page>
         </main>
       </div>
@@ -174,8 +183,8 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
             icon={IconTests}
             title="Testlar"
             subtitle="Fizika va matematika fanlaridan test topshirish"
-            stat={`${state.tests.length} ta test`}
-            foot="20 daqiqa"
+            stat={`${availableTests.length} ta`}
+            foot={availableTests.length > 0 ? 'ochiq test' : 'hozircha yopiq'}
             onClick={() => setPage('tests')}
             delay={160}
           />
@@ -340,26 +349,57 @@ function HomeContent({ student, myResults, perSubjectAvg, avg, attRate, state, p
    TESTS
    ============================================================ */
 function TestsContent({ tests, onStart }) {
+  if (!tests || tests.length === 0) {
+    return (
+      <EmptyState
+        art={Blackboard}
+        title="Hozircha test yo'q"
+        hint="O'qituvchi test ochganda shu yerda paydo bo'ladi."
+      />
+    );
+  }
+
+  // Open tests first, then locked ones.
+  const sorted = [...tests].sort((a, b) => (isTestOpen(b) ? 1 : 0) - (isTestOpen(a) ? 1 : 0));
+
   return (
     <div className="quiz-grid">
-      {tests.map((t) => (
-        <article key={t.id} className="quiz-card">
-          <div className="corner-art"><Blackboard size={84} accent={SUBJECTS[t.subject]?.accent} /></div>
-          <div className="quiz-meta">
-            <SubjectChip subject={t.subject} />
-            <span className="tiny">{t.questionIds.length} ta savol</span>
-          </div>
-          <h3>{t.title}</h3>
-          <p>{t.description}</p>
-          <div className="quiz-foot">
-            <span className="muted" style={{ fontSize: 12 }}>20 daqiqa · yakka tartib</span>
-            <button className="btn btn-primary" onClick={() => onStart(t.id)}>
-              Boshlash
-              <span className="arrow-orb" aria-hidden="true">→</span>
-            </button>
-          </div>
-        </article>
-      ))}
+      {sorted.map((t) => {
+        const open = isTestOpen(t);
+        const status = testStatus(t);
+        const count = (t.questionIds || []).length;
+        return (
+          <article key={t.id} className={`quiz-card ${open ? '' : 'locked'}`}>
+            <div className="corner-art"><Blackboard size={84} accent={SUBJECTS[t.subject]?.accent} /></div>
+            <div className="quiz-meta">
+              <SubjectChip subject={t.subject} />
+              <span className="tiny">{count} ta savol</span>
+              {!open && (
+                <span className={`stud-badge ${status.tone === 'warn' ? 'amber' : 'red'}`}>{status.label}</span>
+              )}
+            </div>
+            <h3>{t.title}</h3>
+            <p>{t.description || `${count} ta savol`}</p>
+            <div className="quiz-foot">
+              {open ? (
+                <>
+                  <span className="muted" style={{ fontSize: 12 }}>20 daqiqa · yakka tartib</span>
+                  <button className="btn btn-primary" onClick={() => onStart(t.id)}>
+                    Boshlash
+                    <span className="arrow-orb" aria-hidden="true">&rarr;</span>
+                  </button>
+                </>
+              ) : (
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {t.availability === 'scheduled' && t.openAt
+                    ? `${formatDateTime(t.openAt)} da ochiladi`
+                    : 'Test hozircha yopiq'}
+                </span>
+              )}
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }

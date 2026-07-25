@@ -199,7 +199,8 @@ export function formatDateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   if (isNaN(d)) return iso;
-  return d.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    + ', ' + d.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
 }
 
 export function daysBetween(a, b) {
@@ -550,6 +551,63 @@ export function ShellCard({ children, className, as: Tag = 'div', ...rest }) {
     <Tag className={`shell ${className || ''}`} {...rest}>
       <div className="card">{children}</div>
     </Tag>
+  );
+}
+
+// Custom styled dropdown — matches the app's design instead of the native
+// browser option list. Drop-in replacement for a labelled <select> inside .field.
+export function Select({ value, onChange, options, ariaLabel, placeholder = 'Tanlang' }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function onEsc(e) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onEsc);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onEsc); };
+  }, [open]);
+
+  const current = options.find((o) => o.value === value);
+
+  return (
+    <div className={`select ${open ? 'open' : ''}`} ref={ref}>
+      <button
+        type="button"
+        className="select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{current ? current.label : placeholder}</span>
+        <svg className="chev" width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M1 1l5 5 5-5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="select-panel" role="listbox">
+          {options.map((o) => (
+            <button
+              type="button"
+              key={o.value}
+              role="option"
+              aria-selected={o.value === value}
+              className={`select-opt ${o.value === value ? 'selected' : ''}`}
+              onClick={() => { onChange(o.value); setOpen(false); }}
+            >
+              <span>{o.label}</span>
+              {o.value === value && (
+                <svg className="tick" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M2 7.5l3.2 3.2L12 4" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

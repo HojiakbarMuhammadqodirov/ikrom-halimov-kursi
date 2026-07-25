@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Section, SubjectChip, Pill, EmptyState } from './shared.jsx';
-import { SUBJECTS } from '../data/seed.js';
 import { IntegralGlyph } from './SubjectArt.jsx';
+import { questionType, isAnswered, gradeQuestion, scoreTest, correctIndices } from '../lib/tests.js';
 
 const TEST_MINUTES = 20;
 
@@ -13,7 +13,7 @@ function fmtClock(sec) {
 
 export default function TestRunner({ state, setState, test, student, onDone }) {
   const questions = useMemo(
-    () => test.questionIds.map((id) => state.questions.find((q) => q.id === id)).filter(Boolean),
+    () => (test.questionIds || []).map((id) => state.questions.find((q) => q.id === id)).filter(Boolean),
     [test, state.questions]
   );
 
@@ -23,32 +23,34 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
   const [timeLeft, setTimeLeft] = useState(TEST_MINUTES * 60);
   const submittedRef = useRef(false);
 
-  // Countdown — ticks only while taking the test.
   useEffect(() => {
     if (phase === 'done') return undefined;
     const id = setInterval(() => setTimeLeft((t) => (t <= 1 ? 0 : t - 1)), 1000);
     return () => clearInterval(id);
   }, [phase]);
 
-  // Auto-submit when time runs out.
   useEffect(() => {
     if (timeLeft === 0 && phase !== 'done') submit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
 
-  function pick(qid, optIdx) {
+  // Set (single/truefalse) or toggle (multi) the answer for a question.
+  function choose(q, optIdx) {
     if (phase === 'done') return;
-    setAnswers((a) => ({ ...a, [qid]: optIdx }));
+    setAnswers((a) => {
+      if (questionType(q) === 'multi') {
+        const cur = Array.isArray(a[q.id]) ? a[q.id] : [];
+        const next = cur.includes(optIdx) ? cur.filter((x) => x !== optIdx) : [...cur, optIdx];
+        return { ...a, [q.id]: next };
+      }
+      return { ...a, [q.id]: optIdx };
+    });
   }
 
   function submit() {
     if (submittedRef.current) return;
     submittedRef.current = true;
-    const correctCount = questions.filter((q) => answers[q.id] === q.answer).length;
-    const total = questions.length;
-    const score = total === 0 ? 0 : Math.round((correctCount / total) * 100);
-    const wrongQuestionIds = questions.filter((q) => answers[q.id] !== q.answer).map((q) => q.id);
-
+    const { correctCount, total, score, wrongQuestionIds } = scoreTest(questions, answers);
     const result = {
       id: 'r-' + student.id + '-' + Date.now(),
       studentId: student.id,
@@ -61,7 +63,6 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
       answers,
       wrongQuestionIds,
     };
-
     setState((s) => ({ ...s, testResults: [...s.testResults, result] }));
     setPhase('done');
   }
@@ -74,18 +75,17 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
     );
   }
 
-  const answeredCount = questions.filter((q) => answers[q.id] !== undefined).length;
+  const answeredCount = questions.filter((q) => isAnswered(q, answers[q.id])).length;
 
   /* ---------------- RESULTS ---------------- */
   if (phase === 'done') {
-    const correctCount = questions.filter((q) => answers[q.id] === q.answer).length;
-    const score = Math.round((correctCount / questions.length) * 100);
+    const { correctCount, score } = scoreTest(questions, answers);
     const topicBreakdown = {};
-    state.topics.forEach((t) => { topicBreakdown[t] = { correct: 0, total: 0 }; });
     questions.forEach((q) => {
-      if (!topicBreakdown[q.topic]) topicBreakdown[q.topic] = { correct: 0, total: 0 };
-      topicBreakdown[q.topic].total += 1;
-      if (answers[q.id] === q.answer) topicBreakdown[q.topic].correct += 1;
+      const key = q.topic || test.title;
+      if (!topicBreakdown[key]) topicBreakdown[key] = { correct: 0, total: 0 };
+      topicBreakdown[key].total += 1;
+      if (gradeQuestion(q, answers[q.id])) topicBreakdown[key].correct += 1;
     });
     const scoreColor = score >= 70 ? 'var(--ok)' : score >= 50 ? 'var(--warn)' : 'var(--bad)';
 
@@ -111,9 +111,8 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
         </div>
 
         <Section title="Mavzular bo&lsquo;yicha natija">
-          {state.topics.map((t) => {
-            const s = topicBreakdown[t];
-            if (!s || s.total === 0) return null;
+          {Object.entries(topicBreakdown).map(([t, s]) => {
+            if (s.total === 0) return null;
             const pct = Math.round((s.correct / s.total) * 100);
             const variant = pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad';
             return (
@@ -132,19 +131,22 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
 
         <Section title="Javoblar tahlili">
           {questions.map((q, i) => {
+            const correct = correctIndices(q);
             const userAns = answers[q.id];
+            const userSet = questionType(q) === 'multi' ? (Array.isArray(userAns) ? userAns : []) : (userAns === undefined ? [] : [userAns]);
+            const ok = gradeQuestion(q, userAns);
             return (
               <div className="test-q" key={q.id}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <span className="tiny" style={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>{i + 1}-savol · {q.topic}</span>
-                  {userAns === q.answer
-                    ? <Pill kind="up">To&lsquo;g&lsquo;ri</Pill>
-                    : <Pill kind="down">{userAns === undefined ? 'Javob berilmagan' : 'Xato'}</Pill>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <span className="tiny" style={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>{i + 1}-savol · {q.topic || ''}</span>
+                  {ok ? <Pill kind="up">To&lsquo;g&lsquo;ri</Pill> : <Pill kind="down">{isAnswered(q, userAns) ? 'Xato' : 'Javob berilmagan'}</Pill>}
                 </div>
                 <h4>{q.text}</h4>
                 {q.options.map((opt, idx) => {
-                  const cls = idx === q.answer ? 'correct' : idx === userAns && idx !== q.answer ? 'wrong' : '';
-                  const mark = idx === q.answer ? '✓' : idx === userAns ? '✗' : String.fromCharCode(65 + idx);
+                  const isCorrect = correct.includes(idx);
+                  const isPicked = userSet.includes(idx);
+                  const cls = isCorrect ? 'correct' : isPicked ? 'wrong' : '';
+                  const mark = isCorrect ? '✓' : isPicked ? '✗' : String.fromCharCode(65 + idx);
                   return (
                     <div key={idx} className={`test-option ${cls}`} style={{ cursor: 'default' }}>
                       <span className="opt-letter">{mark}</span>
@@ -167,9 +169,9 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
     );
   }
 
-  /* ---------------- REVIEW BEFORE SUBMIT ---------------- */
+  /* ---------------- REVIEW ---------------- */
   if (phase === 'review') {
-    const unanswered = questions.filter((q) => answers[q.id] === undefined);
+    const unanswered = questions.filter((q) => !isAnswered(q, answers[q.id]));
     return (
       <div className="stack-lg">
         <div className="test-topbar">
@@ -190,15 +192,13 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
               {unanswered.length} ta savol javobsiz qoldi. Yuborsangiz ular xato deb hisoblanadi.
             </div>
           ) : (
-            <div className="success-banner" style={{ marginBottom: 16 }}>
-              Barcha savollarga javob berdingiz.
-            </div>
+            <div className="success-banner" style={{ marginBottom: 16 }}>Barcha savollarga javob berdingiz.</div>
           )}
           <div className="qnav">
             {questions.map((q, i) => (
               <button
                 key={q.id}
-                className={`qnav-dot ${answers[q.id] !== undefined ? 'answered' : ''}`}
+                className={`qnav-dot ${isAnswered(q, answers[q.id]) ? 'answered' : ''}`}
                 onClick={() => { setStep(i); setPhase('quiz'); }}
                 title={`${i + 1}-savol`}
               >
@@ -221,7 +221,9 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
 
   /* ---------------- QUIZ ---------------- */
   const q = questions[step];
-  const picked = answers[q.id];
+  const type = questionType(q);
+  const userAns = answers[q.id];
+  const selected = (idx) => (type === 'multi' ? (Array.isArray(userAns) && userAns.includes(idx)) : userAns === idx);
   const progress = ((step + 1) / questions.length) * 100;
   const isLast = step === questions.length - 1;
 
@@ -231,7 +233,7 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
         <div className="subject-strip" style={{ margin: 0, flex: 1, minWidth: 0 }}>
           <div className="left">
             <SubjectChip subject={test.subject} />
-            <span>{q.topic}</span>
+            <span>{q.topic || test.title}</span>
           </div>
         </div>
         <div className={`test-timer ${timeLeft <= 120 ? 'low' : ''}`} aria-label="Qolgan vaqt">
@@ -253,18 +255,20 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
       <div className="card">
         <div className="card-title">
           <h2 style={{ fontSize: 22 }}>{q.text}</h2>
-          <span className="meta">{q.topic}</span>
+          {type === 'multi' && <span className="meta">bir nechta to&lsquo;g&lsquo;ri javob bo&lsquo;lishi mumkin</span>}
         </div>
         {q.options.map((opt, idx) => (
           <div
             key={idx}
-            className={`test-option ${picked === idx ? 'selected' : ''}`}
-            onClick={() => pick(q.id, idx)}
+            className={`test-option ${selected(idx) ? 'selected' : ''}`}
+            onClick={() => choose(q, idx)}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(q.id, idx); } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(q, idx); } }}
           >
-            <span className="opt-letter">{String.fromCharCode(65 + idx)}</span>
+            <span className="opt-letter" style={type === 'multi' ? { borderRadius: 6 } : undefined}>
+              {type === 'truefalse' ? (idx === 0 ? '✓' : '✕') : String.fromCharCode(65 + idx)}
+            </span>
             <span>{opt}</span>
           </div>
         ))}
@@ -274,7 +278,7 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
         {questions.map((qq, i) => (
           <button
             key={qq.id}
-            className={`qnav-dot ${answers[qq.id] !== undefined ? 'answered' : ''} ${i === step ? 'current' : ''}`}
+            className={`qnav-dot ${isAnswered(qq, answers[qq.id]) ? 'answered' : ''} ${i === step ? 'current' : ''}`}
             onClick={() => setStep(i)}
             title={`${i + 1}-savol`}
           >
