@@ -67,7 +67,18 @@ const students = [
   { id: 's-4', username: 'nigora.t',     fullName: 'Nigora Toshmatova', phone: '+998 94 456 78 90', subjects: ['matematika'] },
   { id: 's-5', username: 'bobur.k',      fullName: 'Bobur Karimov',   phone: '+998 95 567 89 01', subjects: ['fizika', 'matematika'] },
   { id: 's-6', username: 'dilfuza.m',    fullName: 'Dilfuza Mahmudova', phone: '+998 97 678 90 12', subjects: ['fizika'] },
-].map((s) => ({ ...s, role: 'student', password: s.username + '2026' }));
+  // Parent contact starts empty on purpose — the "ota-onani kiriting" flow and
+  // the test gate are the first thing you hit when logging in as a student.
+].map((s) => ({
+  ...s,
+  role: 'student',
+  password: s.username + '2026',
+  parentName: '',
+  parentPhone: '',
+  parentRelation: '',
+  parentAddedAt: null,   // set on the student's one-time save; locks the form
+  parentTgLinked: false, // cached mirror of the server's parent_links row
+}));
 
 const users = [admin, teacher, ...students];
 
@@ -333,4 +344,7 @@ export const initialState = {
   settings,
   topics: TOPICS,
   subjects: SUBJECTS,
+  // Sign-up applications submitted from the public landing page. Starts empty —
+  // the shallow merge in storage.js backfills it onto older saved state.
+  applications: [],
 };

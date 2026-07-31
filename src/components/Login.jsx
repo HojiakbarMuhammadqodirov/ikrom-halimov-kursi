@@ -8,7 +8,7 @@ const DEMO_ACCOUNTS = [
   { role: 'O\'quvchi',   user: 'ali.akbarov',     pass: 'ali.akbarov2026' },
 ];
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, onBack }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -73,6 +73,11 @@ export default function Login({ onLogin }) {
       {/* Right form */}
       <div className="login-form-wrap">
         <form className="login-form" onSubmit={handleSubmit}>
+          {onBack && (
+            <button type="button" className="login-back" onClick={onBack}>
+              <span aria-hidden="true">←</span> Bosh sahifaga
+            </button>
+          )}
           <div className="eyebrow"><span /> Hisobga kirish</div>
           <h2>Xush kelibsiz</h2>
           <p className="lede">

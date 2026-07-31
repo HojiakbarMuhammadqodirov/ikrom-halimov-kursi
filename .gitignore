@@ -4,3 +4,16 @@ dist
 *.log
 .DS_Store
 Thumbs.db
+
+# Secrets — the Telegram bot token lives here locally and in Vercel env vars,
+# never in the repo. .env.example is committed and holds names only.
+.env
+.env.*
+!.env.example
+
+# The unredacted certificate scans (home address, phone, DOB, passport photo).
+# Only the redacted copies in src/assets/certs/ are ever imported or deployed.
+src/certificates/
+
+# Local screenshots — working artifacts, not part of the app.
+src/screenshots/

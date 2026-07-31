@@ -1,13 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import {
   Header, Section, SubjectChip, ShellCard, ProgressBar, Sparkline, EmptyState, Pill, Modal,
-  NavCard, Page,
-  IconOverview, IconStudents, IconTeachers, IconSettings,
-  formatMoney, formatDate, initials,
+  NavCard, Page, Select,
+  IconOverview, IconStudents, IconTeachers, IconSettings, IconMaterials,
+  formatMoney, formatDate, formatDateTime, initials,
 } from './shared.jsx';
 import { SUBJECTS } from '../data/seed.js';
 import StudentDetail from './StudentDetail.jsx';
 import { updateUserPassword } from '../lib/auth.js';
+import {
+  PARENT_RELATIONS, hasParentContact, phoneHref, isValidUzPhone, normalizePhone,
+} from '../lib/parent.js';
 import { RulerCompass, Blackboard } from './SubjectArt.jsx';
 
 export default function AdminPanel({ state, setState, user, onLogout, theme, onToggleTheme }) {
@@ -69,6 +72,19 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
     );
   }
 
+  if (page === 'applications') {
+    return (
+      <div className="dashboard">
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
+        <main className="main">
+          <Page title="Arizalar" backLabel="Dashboard" onBack={() => setPage(null)}>
+            <ApplicationsTab state={state} setState={setState} />
+          </Page>
+        </main>
+      </div>
+    );
+  }
+
   if (page === 'settings') {
     return (
       <div className="dashboard">
@@ -104,6 +120,8 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
   }, [state]);
 
   const overdue = state.payments.filter((p) => p.status === 'overdue').length;
+  const applications = state.applications || [];
+  const newApplications = applications.filter((a) => a.status === 'yangi').length;
 
   return (
     <div className="dashboard">
@@ -150,12 +168,22 @@ export default function AdminPanel({ state, setState, user, onLogout, theme, onT
           />
 
           <NavCard
+            icon={IconMaterials}
+            title="Arizalar"
+            subtitle="Bosh sahifadagi shakl orqali yuborilgan sinov darsi arizalari"
+            stat={applications.length}
+            foot={newApplications > 0 ? `${newApplications} ta yangi` : 'yangi ariza yo\'q'}
+            onClick={() => setPage('applications')}
+            delay={320}
+          />
+
+          <NavCard
             icon={IconSettings}
             title="Sozlamalar"
             subtitle="Kurs nomi, oylik to'lov miqdori va test sanalarini o'zgartirish"
             foot={formatMoney(state.settings.monthlyFee)}
             onClick={() => setPage('settings')}
-            delay={320}
+            delay={400}
           />
         </div>
       </nav>
@@ -343,6 +371,7 @@ function StudentsTab({ state, setState, onView }) {
               <th>F.I.Sh.</th>
               <th>Login</th>
               <th>Telefon</th>
+              <th>Ota-ona</th>
               <th>Fanlar</th>
               <th>Parol</th>
               <th className="text-right">Amallar</th>
@@ -354,6 +383,17 @@ function StudentsTab({ state, setState, onView }) {
                 <td><a href="#" onClick={(e) => { e.preventDefault(); onView(s.id); }}>{s.fullName}</a></td>
                 <td><code className="mono">{s.username}</code></td>
                 <td>{s.phone || '—'}</td>
+                <td>
+                  {hasParentContact(s) ? (
+                    <>
+                      {s.parentName}
+                      <br />
+                      <a className="mono" style={{ fontSize: 11 }} href={phoneHref(s.parentPhone)}>{s.parentPhone}</a>
+                    </>
+                  ) : (
+                    <Pill kind="overdue">Yo'q</Pill>
+                  )}
+                </td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     {(s.subjects || []).map((sid) => <SubjectChip key={sid} subject={sid} />)}
@@ -380,6 +420,9 @@ function AddStudentForm({ setState, onDone }) {
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
+  const [parentName, setParentName] = useState('');
+  const [parentRelation, setParentRelation] = useState(PARENT_RELATIONS[0]);
+  const [parentPhone, setParentPhone] = useState('');
   const [subjects, setSubjects] = useState(['fizika', 'matematika']);
   const [error, setError] = useState('');
 
@@ -394,7 +437,20 @@ function AddStudentForm({ setState, onDone }) {
     setState((s) => {
       if (s.users.some((u) => u.username === username)) { setError('Bu login band'); return s; }
       const id = 's-' + Date.now();
-      const student = { id, role: 'student', fullName: fullName.trim(), username: username.trim(), phone: phone.trim(), password: username.trim() + '2026', subjects };
+      const student = {
+        id, role: 'student',
+        fullName: fullName.trim(),
+        username: username.trim(),
+        phone: phone.trim(),
+        password: username.trim() + '2026',
+        subjects,
+        // Left blank when the admin doesn't fill them in: the student then hits
+        // the parent-contact gate on first login and enters them personally.
+        parentName: parentName.trim(),
+        parentRelation: parentName.trim() ? parentRelation : '',
+        parentPhone: isValidUzPhone(parentPhone) ? normalizePhone(parentPhone) : '',
+        parentAddedAt: parentName.trim() && isValidUzPhone(parentPhone) ? new Date().toISOString() : null,
+      };
       return {
         ...s,
         students: [...s.students, student],
@@ -434,6 +490,29 @@ function AddStudentForm({ setState, onDone }) {
             <div className="field-inner">
               <label>Telefon</label>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <div className="field-inner">
+              <label>Ota-ona F.I.Sh. <span className="muted">(ixtiyoriy)</span></label>
+              <input value={parentName} onChange={(e) => setParentName(e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <div className="field-inner">
+              <label>Ota-ona kimligi</label>
+              <Select
+                value={parentRelation}
+                onChange={setParentRelation}
+                ariaLabel="Ota-onaning kimligi"
+                options={PARENT_RELATIONS.map((r) => ({ value: r, label: r }))}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <div className="field-inner">
+              <label>Ota-ona telefoni</label>
+              <input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="90 123 45 67" inputMode="tel" />
             </div>
           </div>
         </div>
@@ -561,6 +640,91 @@ function AddTeacherForm({ setState, onDone }) {
         <button type="submit" className="btn btn-primary">Saqlash</button>
       </div>
     </form>
+  );
+}
+
+/* ============================================================
+   APPLICATIONS — sign-ups from the public landing page
+   ============================================================ */
+// `kind` maps onto the existing .pill-* classes in styles.css — no new colours.
+const APPLICATION_STATUS = [
+  { key: 'yangi', label: 'Yangi', kind: 'accent' },
+  { key: 'boglanildi', label: 'Bog\'lanildi', kind: 'due' },
+  { key: 'yozildi', label: 'Yozildi', kind: 'paid' },
+];
+
+function ApplicationsTab({ state, setState }) {
+  const applications = state.applications || [];
+
+  function setStatus(id, status) {
+    setState((s) => ({
+      ...s,
+      applications: (s.applications || []).map((a) => (a.id === id ? { ...a, status } : a)),
+    }));
+  }
+
+  function remove(id) {
+    setState((s) => ({ ...s, applications: (s.applications || []).filter((a) => a.id !== id) }));
+  }
+
+  if (applications.length === 0) {
+    return (
+      <EmptyState
+        art={Blackboard}
+        title="Hozircha ariza yo'q"
+        hint="Bosh sahifadagi «Sinov darsiga yozilish» shakli orqali yuborilgan arizalar shu yerda ko'rinadi."
+      />
+    );
+  }
+
+  return (
+    <Section title={`${applications.length} ta ariza`}>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Ism-familiya</th>
+              <th>Telefon</th>
+              <th>Sinf</th>
+              <th>Fan</th>
+              <th>Yuborilgan</th>
+              <th>Holat</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {applications.map((a) => (
+              <tr key={a.id}>
+                <td><b>{a.name}</b></td>
+                <td><a className="mono" href={`tel:${a.phone.replace(/\s/g, '')}`}>{a.phone}</a></td>
+                <td>{a.grade}</td>
+                <td>
+                  {a.subject === 'ikkalasi'
+                    ? <><SubjectChip subject="fizika" /> <SubjectChip subject="matematika" /></>
+                    : <SubjectChip subject={a.subject} />}
+                </td>
+                <td className="mono" style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{formatDateTime(a.createdAt)}</td>
+                <td>
+                  <Pill kind={APPLICATION_STATUS.find((s) => s.key === a.status)?.kind || 'accent'}>
+                    {APPLICATION_STATUS.find((s) => s.key === a.status)?.label || a.status}
+                  </Pill>
+                </td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {APPLICATION_STATUS.filter((s) => s.key !== a.status).map((s) => (
+                    <button key={s.key} className="btn btn-sm" style={{ marginLeft: 6 }} onClick={() => setStatus(a.id, s.key)}>
+                      {s.label}
+                    </button>
+                  ))}
+                  <button className="btn btn-sm btn-danger" style={{ marginLeft: 6 }} onClick={() => remove(a.id)}>
+                    O'chirish
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 

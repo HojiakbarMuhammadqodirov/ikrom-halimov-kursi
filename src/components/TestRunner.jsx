@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Section, SubjectChip, Pill, EmptyState } from './shared.jsx';
 import { IntegralGlyph } from './SubjectArt.jsx';
 import { questionType, isAnswered, gradeQuestion, scoreTest, correctIndices } from '../lib/tests.js';
+import { notifyTestResult } from '../lib/notify.js';
 
 const TEST_MINUTES = 20;
 
@@ -65,6 +66,10 @@ export default function TestRunner({ state, setState, test, student, onDone }) {
     };
     setState((s) => ({ ...s, testResults: [...s.testResults, result] }));
     setPhase('done');
+
+    // Fire-and-forget: the result is already saved, so a failed or absent
+    // backend must not surface as an error on the student's results screen.
+    notifyTestResult(student, test, result).catch(() => {});
   }
 
   if (questions.length === 0) {

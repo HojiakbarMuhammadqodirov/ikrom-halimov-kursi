@@ -3,8 +3,11 @@
 import { initialState } from './seed.js';
 
 // Bumped to v2 when the seed was re-scoped from 5 subjects to 2 (Fizika + Matematika).
-// Old v1 data is ignored — the user gets a clean, fresh seed on first load.
-const STORAGE_KEY = 'ikrom-kursi-v2';
+// Bumped to v3 when students/users gained the parent-contact fields: the merge
+// below is shallow, so it cannot reach inside the students array to add them —
+// stale v2 rows would arrive without the fields and read as "parent missing"
+// forever. Old data is ignored; the user gets a clean, fresh seed on first load.
+const STORAGE_KEY = 'ikrom-kursi-v3';
 
 export function loadState() {
   try {

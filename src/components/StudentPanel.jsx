@@ -1,14 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Header, Section, Sparkline, ProgressBar, SubjectChip, EmptyState, ShellCard,
   NavCard, Page, HeaderTimer,
-  IconHome, IconTests, IconMaterials, IconPayment,
+  IconHome, IconTests, IconMaterials, IconPayment, IconStudents,
   formatDate, formatDateTime, formatMoney, daysUntil, Pill, initials,
 } from './shared.jsx';
 import { SUBJECTS } from '../data/seed.js';
 import TestRunner from './TestRunner.jsx';
 import { Pythagorean, AtomOrbit, Blackboard } from './SubjectArt.jsx';
 import { isTestOpen, testStatus } from '../lib/tests.js';
+import { canTakeTests, hasParentContact, isParentLockedForStudent } from '../lib/parent.js';
+import { ParentContactForm, ParentContactSummary } from './ParentContact.jsx';
+import ParentLink from './ParentLink.jsx';
 
 export default function StudentPanel({ state, setState, user, onLogout, theme, onToggleTheme }) {
   const student = state.students.find((s) => s.id === user.id);
@@ -60,7 +63,37 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   const myTests = state.tests.filter((t) => mySubjects.includes(t.subject));
   const availableTests = myTests.filter((t) => isTestOpen(t));
 
-  if (runningTestId) {
+  // Tests stay locked until the parent contact is on file. Checked here as well
+  // as inside TestsContent so a stale runningTestId can't slip past the gate.
+  const testsUnlocked = canTakeTests(student);
+  const parentLocked = isParentLockedForStudent(student);
+
+  // ParentLink calls this from a poll, so it must be referentially stable and
+  // must not write when nothing changed — otherwise the effect that owns the
+  // poll re-runs on every tick.
+  const markTelegramLinked = useCallback(() => {
+    setState((s) => {
+      const cur = s.students.find((x) => x.id === user.id);
+      if (!cur || cur.parentTgLinked) return s;
+      return {
+        ...s,
+        students: s.students.map((x) => (x.id === user.id ? { ...x, parentTgLinked: true } : x)),
+        users: s.users.map((u) => (u.id === user.id ? { ...u, parentTgLinked: true } : u)),
+      };
+    });
+  }, [setState, user.id]);
+
+  function saveParentContact(fields) {
+    const patch = { ...fields, parentAddedAt: new Date().toISOString() };
+    setState((s) => ({
+      ...s,
+      students: s.students.map((x) => (x.id === student.id ? { ...x, ...patch } : x)),
+      users: s.users.map((u) => (u.id === student.id ? { ...u, ...patch } : u)),
+    }));
+    setPage(null);
+  }
+
+  if (runningTestId && testsUnlocked) {
     const t = state.tests.find((x) => x.id === runningTestId);
     return (
       <div className="dashboard">
@@ -112,7 +145,31 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
           <Page title="Testlar" backLabel="Dashboard" onBack={() => setPage(null)}>
             <TestsContent
               tests={myTests}
-              onStart={(id) => { const t = state.tests.find((x) => x.id === id); if (t && isTestOpen(t)) setRunningTestId(id); }}
+              unlocked={testsUnlocked}
+              onOpenParent={() => setPage('parent')}
+              onStart={(id) => {
+                if (!testsUnlocked) return;
+                const t = state.tests.find((x) => x.id === id);
+                if (t && isTestOpen(t)) setRunningTestId(id);
+              }}
+            />
+          </Page>
+        </main>
+      </div>
+    );
+  }
+
+  if (page === 'parent') {
+    return (
+      <div className="dashboard">
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
+        <main className="main">
+          <Page title="Ota-ona ma'lumotlari" backLabel="Dashboard" onBack={() => setPage(null)}>
+            <ParentContent
+              student={student}
+              locked={parentLocked}
+              onSave={saveParentContact}
+              onTelegramLinked={markTelegramLinked}
             />
           </Page>
         </main>
@@ -167,6 +224,24 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
         </div>
       </div>
 
+      {!testsUnlocked && (
+        <div className="parent-banner-wrap">
+        <div className="parent-banner">
+          <div className="parent-banner-text">
+            <b>Ota-onangiz ma'lumotlari kiritilmagan.</b>
+            <span>
+              Test topshirish uchun ota-onangizning ismi va telefon raqamini kiritishingiz kerak.
+              Natijalaringiz haqidagi xabarlar shu raqamga yuboriladi.
+            </span>
+          </div>
+          <button className="btn btn-primary" onClick={() => setPage('parent')}>
+            Kiritish
+            <span className="arrow-orb" aria-hidden="true">&rarr;</span>
+          </button>
+        </div>
+        </div>
+      )}
+
       <nav className="dashboard-nav">
         <div className="dashboard-nav-inner">
           <NavCard
@@ -183,8 +258,8 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
             icon={IconTests}
             title="Testlar"
             subtitle="Fizika va matematika fanlaridan test topshirish"
-            stat={`${availableTests.length} ta`}
-            foot={availableTests.length > 0 ? 'ochiq test' : 'hozircha yopiq'}
+            stat={testsUnlocked ? `${availableTests.length} ta` : '🔒'}
+            foot={!testsUnlocked ? 'ota-ona ma\'lumoti kerak' : availableTests.length > 0 ? 'ochiq test' : 'hozircha yopiq'}
             onClick={() => setPage('tests')}
             delay={160}
           />
@@ -207,6 +282,16 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
             foot={payment?.status === 'paid' ? "To'langan" : payment?.status === 'due_soon' ? 'Yaqin orada' : "Muddati o'tgan"}
             onClick={() => setPage('payment')}
             delay={320}
+          />
+
+          <NavCard
+            icon={IconStudents}
+            title="Ota-ona"
+            subtitle="Xabarnomalar yuboriladigan ota-ona ismi va telefon raqami"
+            stat={hasParentContact(student) ? '✓' : '—'}
+            foot={hasParentContact(student) ? 'kiritilgan' : 'kiritilmagan'}
+            onClick={() => setPage('parent')}
+            delay={400}
           />
         </div>
       </nav>
@@ -346,9 +431,84 @@ function HomeContent({ student, myResults, perSubjectAvg, avg, attRate, state, p
 }
 
 /* ============================================================
+   PARENT CONTACT
+   ============================================================ */
+function ParentContent({ student, locked, onSave, onTelegramLinked }) {
+  if (locked) {
+    return (
+      <div className="bento">
+        <ShellCard className="span-7">
+          <div className="card-title">
+            <h2>Ota-ona ma'lumotlari</h2>
+            <Pill kind="paid">Kiritilgan</Pill>
+          </div>
+          <ParentContactSummary student={student} />
+          <div className="divider" />
+          <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+            Bu ma'lumotni o'zgartirish uchun ustozingizga murojaat qiling. Xatolik bo'lsa,
+            ustoz o'z panelidan tuzatib beradi.
+          </p>
+        </ShellCard>
+
+        <ShellCard className="span-5">
+          <div className="card-title"><h2>Nima uchun kerak</h2></div>
+          <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, margin: 0 }}>
+            Test natijalaringiz, davomatingiz va to'lov eslatmalari shu raqamga yuboriladi.
+            Shuning uchun raqam to'g'ri va ishlaydigan bo'lishi muhim.
+          </p>
+        </ShellCard>
+
+        <ShellCard className="span-12">
+          <div className="card-title"><h2>Telegram</h2></div>
+          <ParentLink student={student} onLinked={onTelegramLinked} />
+        </ShellCard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bento">
+      <ShellCard className="span-12">
+        <div className="card-title">
+          <h2>Ota-onangiz haqida ma'lumot</h2>
+          <Pill kind="overdue">Kiritilmagan</Pill>
+        </div>
+        <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.7, marginTop: 0, marginBottom: 20, maxWidth: '62ch' }}>
+          Test natijalaringiz, davomatingiz va to'lov eslatmalari ota-onangizga yuboriladi.
+          Test topshirish uchun avval shu ma'lumotni to'ldiring.
+        </p>
+        <ParentContactForm
+          student={student}
+          onSave={onSave}
+          submitLabel="Saqlash va davom etish"
+          note="Diqqat: ma'lumotni bir marta kiritasiz. Keyin uni faqat ustozingiz o'zgartira oladi."
+        />
+      </ShellCard>
+    </div>
+  );
+}
+
+/* ============================================================
    TESTS
    ============================================================ */
-function TestsContent({ tests, onStart }) {
+function TestsContent({ tests, unlocked, onStart, onOpenParent }) {
+  if (!unlocked) {
+    return (
+      <div className="parent-gate">
+        <div className="parent-gate-icon" aria-hidden="true">🔒</div>
+        <h3>Testlar hozircha yopiq</h3>
+        <p>
+          Test topshirishdan oldin ota-onangizning ismi va telefon raqamini kiritishingiz kerak.
+          Natijangiz haqidagi xabar o'sha raqamga yuboriladi.
+        </p>
+        <button className="btn btn-primary" onClick={onOpenParent}>
+          Ota-ona ma'lumotlarini kiritish
+          <span className="arrow-orb" aria-hidden="true">&rarr;</span>
+        </button>
+      </div>
+    );
+  }
+
   if (!tests || tests.length === 0) {
     return (
       <EmptyState

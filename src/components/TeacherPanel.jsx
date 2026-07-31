@@ -10,6 +10,10 @@ import StudentDetail from './StudentDetail.jsx';
 import TestBuilder from './TestBuilder.jsx';
 import TestResultsView from './TestResultsView.jsx';
 import { isTestOpen, testStatus, cadenceLabel } from '../lib/tests.js';
+import { hasParentContact, phoneHref, studentsMissingParent } from '../lib/parent.js';
+import { notifyAttendance, notifyPayment } from '../lib/notify.js';
+import { ParentContactForm } from './ParentContact.jsx';
+import NotifyBar from './NotifyBar.jsx';
 
 export default function TeacherPanel({ state, setState, user, onLogout, theme, onToggleTheme }) {
   const [page, setPage] = useState(null);
@@ -230,8 +234,20 @@ function AttendanceTab({ state, setState, onSelect }) {
     setSelYear(newYear);
   }
 
+  // Only absences and lates are worth a message — "keldi" needs no notification.
+  const notifyTargets = state.students
+    .map((s) => ({ student: s, record: getRecord(s.id) }))
+    .filter((x) => x.record && (x.record.status === 'absent' || x.record.status === 'late'));
+
   return (
     <Section title="">
+      <NotifyBar
+        title={`${formatDate(selectedDate)} — davomat xabari`}
+        hint={`${notifyTargets.length} ta o'quvchi kelmagan yoki kechikkan.`}
+        recipients={notifyTargets}
+        send={({ student, record }) => notifyAttendance(student, record)}
+      />
+
       {/* -------- Calendar strip -------- */}
       <div className="cal-strip">
         <div className="cal-controls">
@@ -446,8 +462,20 @@ function PaymentsTab({ state, setState, onSelect }) {
   const target = confirmId ? state.payments.find((p) => p.studentId === confirmId) : null;
   const targetStudent = target ? state.students.find((s) => s.id === target.studentId) : null;
 
+  // Everyone who is not fully paid up — both "yaqin orada" and "muddati o'tgan".
+  const dueTargets = state.students
+    .map((s) => ({ student: s, payment: state.payments.find((p) => p.studentId === s.id) }))
+    .filter((x) => x.payment && x.payment.status !== 'paid');
+
   return (
     <Section title="">
+      <NotifyBar
+        title="To'lov eslatmasi"
+        hint={`${dueTargets.length} ta o'quvchining to'lovi kutilmoqda.`}
+        recipients={dueTargets}
+        send={({ student, payment }) => notifyPayment(student, payment, daysUntil(payment.nextDue))}
+      />
+
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -525,6 +553,7 @@ function StudentsTab({ state, setState, onSelect }) {
   // Hooks must run unconditionally (Rules of Hooks) — declare them before any early return.
   const [payId, setPayId] = useState(null);
   const [closedIds, setClosedIds] = useState(new Set());
+  const [parentId, setParentId] = useState(null);
 
   if (!state || !Array.isArray(state.students)) {
     return <div className="stud-cards" />;
@@ -570,6 +599,22 @@ function StudentsTab({ state, setState, onSelect }) {
   const targetPay = payId ? pays.find((p) => p.studentId === payId) : null;
   const targetStudent = targetPay ? state.students.find((s) => s.id === targetPay.studentId) : null;
 
+  // ---------- parent contact ----------
+  // The teacher is the only one who can correct a contact once the student has
+  // saved it, so this writes both arrays (see CLAUDE.md — users vs students).
+  const parentStudent = parentId ? state.students.find((s) => s.id === parentId) : null;
+
+  function saveParent(studentId, fields) {
+    setState((s) => ({
+      ...s,
+      students: s.students.map((x) => (x.id === studentId ? { ...x, ...fields, parentAddedAt: x.parentAddedAt || new Date().toISOString() } : x)),
+      users: s.users.map((u) => (u.id === studentId ? { ...u, ...fields, parentAddedAt: u.parentAddedAt || new Date().toISOString() } : u)),
+    }));
+    setParentId(null);
+  }
+
+  const missingParent = studentsMissingParent(state.students);
+
   // ---------- compute stats per student ----------
   const studentStats = state.students.map((s) => {
     const attRecords = att.filter((a) => a.studentId === s.id);
@@ -611,6 +656,17 @@ function StudentsTab({ state, setState, onSelect }) {
 
   return (
     <div className="stud-cards">
+      {missingParent.length > 0 && (
+        <div className="parent-banner parent-banner-teacher">
+          <div className="parent-banner-text">
+            <b>{missingParent.length} ta o'quvchida ota-ona ma'lumoti yo'q.</b>
+            <span>
+              Ular test topshira olmaydi: {missingParent.map((s) => s.fullName).join(', ')}.
+            </span>
+          </div>
+        </div>
+      )}
+
       {sorted.length === 0 && (
         <div className="empty-state" style={{ padding: '32px 20px' }}>
           <h3>O'quvchilar yo'q</h3>
@@ -710,6 +766,26 @@ function StudentsTab({ state, setState, onSelect }) {
                 </div>
               </div>
 
+              <div className="stud-row">
+                <label className="stud-label">Ota-ona</label>
+                <div className="stud-inline-group">
+                  {hasParentContact(s) ? (
+                    <span className="stud-pay-info">
+                      {s.parentName}
+                      <span className="muted" style={{ marginLeft: 6, fontSize: 11 }}>
+                        {s.parentRelation ? `${s.parentRelation} · ` : ''}
+                        <a className="mono" href={phoneHref(s.parentPhone)}>{s.parentPhone}</a>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="stud-badge red">Kiritilmagan</span>
+                  )}
+                  <button className="btn btn-sm" onClick={() => setParentId(s.id)}>
+                    {hasParentContact(s) ? 'Tahrirlash' : 'Kiritish'}
+                  </button>
+                </div>
+              </div>
+
               <div className="stud-row stud-actions">
                 <button className="btn btn-sm" onClick={() => onSelect(s.id)}>
                   Batafsil ko'rish
@@ -739,6 +815,21 @@ function StudentsTab({ state, setState, onSelect }) {
             <b>{targetStudent.fullName}</b> uchun <b>{formatMoney(targetPay.monthlyFee)}</b> miqdorida
             oylik to'lov qabul qilinsinmi?
           </p>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!parentStudent}
+        onClose={() => setParentId(null)}
+        title={parentStudent ? `${parentStudent.fullName} — ota-ona ma'lumotlari` : ''}
+      >
+        {parentStudent && (
+          <ParentContactForm
+            student={parentStudent}
+            onSave={(fields) => saveParent(parentStudent.id, fields)}
+            onCancel={() => setParentId(null)}
+            note="Bu raqamga test natijalari, davomat va to'lov eslatmalari yuboriladi."
+          />
         )}
       </Modal>
     </div>
