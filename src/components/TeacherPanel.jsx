@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import {
   Header, Section, SubjectChip, ProgressBar, Sparkline, EmptyState, ShellCard, Modal,
   NavCard, Page,
-  IconAttendance, IconResults, IconPayments, IconStudents, IconTests,
+  IconAttendance, IconResults, IconPayments, IconStudents, IconTests, IconTelegram,
   formatDate, formatMoney, daysUntil, Pill, initials,
 } from './shared.jsx';
+import TelegramTab from './TelegramTab.jsx';
 import { SUBJECTS } from '../data/seed.js';
 import StudentDetail from './StudentDetail.jsx';
 import TestBuilder from './TestBuilder.jsx';
@@ -80,6 +81,19 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
         <main className="main">
           <Page title="O'quvchilar bilan ishlash" backLabel="Dashboard" onBack={() => setPage(null)}>
             <StudentsTab state={state} setState={setState} onSelect={setSelectedStudentId} />
+          </Page>
+        </main>
+      </div>
+    );
+  }
+
+  if (page === 'telegram') {
+    return (
+      <div className="dashboard">
+        <Header title={state.settings.courseName} user={user} onLogout={onLogout} theme={theme} onToggleTheme={onToggleTheme} state={state} />
+        <main className="main">
+          <Page title="Telegram xabarnomasi" backLabel="Dashboard" onBack={() => setPage(null)}>
+            <TelegramTab state={state} />
           </Page>
         </main>
       </div>
@@ -170,6 +184,16 @@ export default function TeacherPanel({ state, setState, user, onLogout, theme, o
             foot="barcha o'quvchilar"
             onClick={() => setPage('students')}
             delay={320}
+          />
+
+          <NavCard
+            icon={IconTelegram}
+            title="Telegram xabarnomasi"
+            subtitle="Ota-onalarni botga ulash va ulanish holatini boshqarish"
+            stat="Ota-onalar"
+            foot="havola berish va uzish"
+            onClick={() => setPage('telegram')}
+            delay={380}
           />
         </div>
       </nav>

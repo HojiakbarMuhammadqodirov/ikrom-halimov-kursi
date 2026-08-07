@@ -10,7 +10,12 @@ const MAX_PER_DAY = 20;
 function config() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set');
+  if (!url || !key) {
+    const err = new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set');
+    err.stage = 'env';
+    err.missing = [!url && 'SUPABASE_URL', !key && 'SUPABASE_SERVICE_ROLE_KEY'].filter(Boolean);
+    throw err;
+  }
   return { url: url.replace(/\/+$/, ''), key };
 }
 
@@ -27,7 +32,13 @@ async function rest(path, init = {}) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Supabase ${res.status}: ${body.slice(0, 300)}`);
+    const err = new Error(`Supabase ${res.status}: ${body.slice(0, 300)}`);
+    err.stage = 'supabase';
+    err.status = res.status;
+    // PostgREST answers with {code, message, ...}; the code alone identifies
+    // the usual setup mistakes (42P01 missing table, 42501 permission).
+    try { err.code = JSON.parse(body)?.code; } catch { /* non-JSON body */ }
+    throw err;
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -36,6 +47,14 @@ async function rest(path, init = {}) {
 export async function getLink(studentId) {
   const rows = await rest(`parent_links?student_id=eq.${encodeURIComponent(studentId)}&select=*`);
   return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+// Every link, for the teacher's Telegram page. chat_id is excluded from the
+// projection on purpose — it is the one value that would let a leaked frontend
+// message a parent directly, and no screen has a use for it.
+export async function listLinks() {
+  const rows = await rest('parent_links?select=student_id,parent_name,linked_at&order=linked_at.desc');
+  return Array.isArray(rows) ? rows : [];
 }
 
 export async function upsertLink(studentId, chatId, parentName) {
@@ -53,6 +72,12 @@ export async function upsertLink(studentId, chatId, parentName) {
 
 export async function removeLink(chatId) {
   await rest(`parent_links?chat_id=eq.${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+}
+
+// The teacher's side of the same thing: /stop is how a parent unsubscribes,
+// this is how the teacher fixes a link that went to the wrong person.
+export async function removeLinkByStudent(studentId) {
+  await rest(`parent_links?student_id=eq.${encodeURIComponent(studentId)}`, { method: 'DELETE' });
 }
 
 // Counts one send against the student's daily cap. Returns false when the cap

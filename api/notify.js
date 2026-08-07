@@ -1,22 +1,33 @@
 import { getLink, consumeQuota } from './_lib/db.js';
 import { sendMessage } from './_lib/telegram.js';
 import { buildMessage } from './_lib/messages.js';
+import { requireTeacher } from './_lib/session.js';
 
 const KINDS = new Set(['test_result', 'attendance', 'payment']);
 
+// Attendance and payment messages are sent by the teacher pressing a button, so
+// they can and do require the teacher session.
+const TEACHER_KINDS = new Set(['attendance', 'payment']);
+
 // Sends one templated message to a student's linked parent.
 //
-// KNOWN LIMITATION: this endpoint is called from the browser and there is no
-// server-side session to authenticate it, because the roster and results live
-// in localStorage. Anyone who reads the frontend source can call it. Two things
-// keep the damage bounded: the message text is built server-side from fixed
-// templates (see _lib/messages.js), and every student has a daily send cap.
-// Closing the hole properly means moving results server-side — stage 3.
+// KNOWN LIMITATION, deliberately accepted: 'test_result' stays unauthenticated.
+// It fires automatically from the student's browser the moment a test is
+// submitted, and that browser holds nothing an attacker could not read out of
+// the bundle — so any credential put here would be a fake one. A forger can
+// therefore send a plausible score for a student whose parent is linked. The
+// damage is bounded: the text is built from fixed server-side templates (see
+// _lib/messages.js), there is a daily cap per student, and a parent who gets an
+// invented score will ask their child about it. What a forger cannot do is
+// receive anything — linking is teacher-only (see link-token.js).
+//
+// Closing this last gap means moving results server-side — stage 3.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   const { studentId, studentName, kind, payload } = req.body || {};
   if (!studentId || !KINDS.has(kind)) return res.status(400).json({ error: 'bad_request' });
+  if (TEACHER_KINDS.has(kind) && !requireTeacher(req, res)) return;
 
   try {
     const link = await getLink(String(studentId));

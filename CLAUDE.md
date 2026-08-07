@@ -92,26 +92,31 @@ Students carry `parentName` / `parentRelation` / `parentPhone` / `parentAddedAt`
 - `isParentLockedForStudent(student)` — true once `parentAddedAt` is set. **The student fills the contact in exactly once**; after that only the teacher (`StudentsTab` modal) or admin can change it, so a bad result can't be hidden by swapping the number.
 - Phones are stored normalized as `+998 90 123 45 67` via `normalizePhone`.
 
-`REQUIRE_TELEGRAM_FOR_TESTS` in `parent.js` is the switch that also demands a linked Telegram parent before tests open. It is **off**: turning it on locks out every student whose parent has not pressed Start, which they cannot do alone.
+`REQUIRE_TELEGRAM_FOR_TESTS` in `parent.js` is the switch that also demands a linked Telegram parent before tests open. It is **off and no longer flippable on its own** — since linking moved to the teacher, a student's browser never learns whether it happened, so `parentTgLinked` is never set and turning the flag on would lock out everyone permanently.
 
 ## Telegram notifications (the only backend)
 
 Setup and operational notes live in `docs/telegram-setup.md`. Read it before touching `api/`.
 
-Four Vercel serverless functions under `api/`, plus `api/_lib/` helpers (the `_` prefix keeps them off the routing table):
+Six Vercel serverless functions under `api/`, plus `api/_lib/` helpers (the `_` prefix keeps them off the routing table):
 
-- `link-token.js` — mints the `t.me/<bot>?start=<token>` deep link. Tokens are **HMAC-signed and self-expiring**, never stored (`_lib/token.js`), so linking needs no token table.
+- `teacher-session.js` — trades `TEACHER_PANEL_PASSWORD` for a 30-day HMAC-signed bearer token (`_lib/session.js`). The only open endpoint that matters, and the gate for the four below.
+- `link-token.js` — mints the `t.me/<bot>?start=<token>` deep link. **Teacher only.** Tokens are HMAC-signed and self-expiring, never stored (`_lib/token.js`), so linking needs no token table.
 - `telegram-webhook.js` — handles `/start <token>` and `/stop`. Guarded by the `X-Telegram-Bot-Api-Secret-Token` header. **Always returns 200**, even on failure, or Telegram retries the same update for hours.
-- `link-status.js` — the page polls this; returns a boolean, never the `chat_id`.
-- `notify.js` — sends one templated message.
+- `link-status.js` — **teacher only.** No `studentId` returns every link for the Telegram page; with one, a single row, polled while a parent presses Start. Never returns the `chat_id`.
+- `unlink.js` — **teacher only.** Removes one link.
+- `notify.js` — sends one templated message. `attendance` and `payment` require the teacher session; `test_result` cannot (see below).
 
 Rules that matter:
 
-- **Message text is built server-side** in `_lib/messages.js` from a fixed set of kinds. The browser sends only `{studentId, studentName, kind, payload}`. Never let the client supply the text — `/api/notify` has no session and is callable by anyone reading the frontend source.
+- **Message text is built server-side** in `_lib/messages.js` from a fixed set of kinds. The browser sends only `{studentId, studentName, kind, payload}`. Never let the client supply the text.
+- **Authorisation cannot live in the browser.** The roster is seeded into the bundle, the demo passwords are on the login screen, and each browser holds its own localStorage — so there is no client-side secret to check and no way to tell a student apart from anyone else. `TEACHER_PANEL_PASSWORD` is an env var precisely because it is the one value the frontend never contains. Do not "simplify" this into something the client sends.
+- `test_result` is the one unauthenticated kind, deliberately: it fires from the student's browser on submit, so any credential there would be a fake one. Bounded by server-side templates plus the daily cap, and a forger can only *send*, never *receive* — linking is teacher-gated.
 - The service-role key is read only in `api/_lib/db.js`. Never name a secret `VITE_*` — Vite inlines those into the bundle.
-- `src/lib/notify.js` is fire-and-forget: every call resolves to a reason string instead of throwing, so a missing backend never blocks a test submission or an attendance save. It detects "no backend" by checking the response content-type, because the SPA rewrite returns `index.html` with a 200 under plain `vite dev`.
+- `src/lib/notify.js` is fire-and-forget: every call resolves to a reason string instead of throwing, so a missing backend never blocks a test submission or an attendance save. It detects "no backend" by checking the response content-type, because the SPA rewrite returns `index.html` with a 200 under plain `vite dev`. A 401 clears the stored session and resolves to `reason: 'auth_required'`.
 - The `vercel.json` rewrite excludes `/api/` (`"/((?!api/).*)"`). Restoring the old catch-all silently breaks every endpoint.
 - Notifications for attendance and payments are **teacher-triggered** (`NotifyBar`), never automatic — a mis-click on the register stays correctable. Test results are the one automatic send.
+- Separator characters bit once already: base64url spells `+` as `-`, so `_lib/token.js` must not be parsed with `split('-')`. It reads the fixed-width tag off the end instead. `_lib/session.js` sidesteps this with `.`, which base64url never produces.
 
 ### Files
 
@@ -127,10 +132,13 @@ src/
     auth.js                 login / logout / currentUser / updateUserPassword
     tests.js                test availability + grading (shared by teacher, student, runner)
     parent.js               parent-contact validation, phone formatting, the test gate
+    notify.js               /api client: teacher session storage + fire-and-forget sends
   components/
     Login.jsx               split editorial login, demo-account quick-fill
     AdminPanel.jsx          overview · students · teachers · settings
-    TeacherPanel.jsx        attendance · testbank · results · payments · students
+    TeacherPanel.jsx        attendance · testbank · results · payments · students · telegram
+    TelegramTab.jsx         teacher-only: password gate, link table, mint/unlink
+    NotifyBar.jsx           "send to parents" bar for attendance & payments
     StudentPanel.jsx        home · tests · materials · payment
     StudentDetail.jsx       per-student profile; the only Recharts consumer
     TestBuilder.jsx         teacher creates a test (params phase → questions phase)

@@ -4,10 +4,12 @@
 
 export const PARENT_RELATIONS = ['Onasi', 'Otasi', 'Vasiysi'];
 
-// Deliberately OFF. Turning this on blocks tests until the *parent* has pressed
-// Start in the bot — which the student cannot do alone, so flipping it on a live
-// course locks out everyone whose parent has not linked yet. Announce it first,
-// let the links accumulate, then switch. This is the only line to change.
+// Deliberately OFF, and no longer flippable on its own. Linking moved to the
+// teacher's panel, so a student's browser never learns whether the link
+// happened and `parentTgLinked` below is never set any more — turning this on
+// today would lock out every student permanently. Making it work again means
+// giving the student panel a way to ask the server, which is exactly the
+// unauthenticated lookup that was removed on purpose.
 export const REQUIRE_TELEGRAM_FOR_TESTS = false;
 
 export function hasParentContact(student) {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Header, Section, Sparkline, ProgressBar, SubjectChip, EmptyState, ShellCard,
   NavCard, Page, HeaderTimer,
@@ -11,7 +11,6 @@ import { Pythagorean, AtomOrbit, Blackboard } from './SubjectArt.jsx';
 import { isTestOpen, testStatus } from '../lib/tests.js';
 import { canTakeTests, hasParentContact, isParentLockedForStudent } from '../lib/parent.js';
 import { ParentContactForm, ParentContactSummary } from './ParentContact.jsx';
-import ParentLink from './ParentLink.jsx';
 
 export default function StudentPanel({ state, setState, user, onLogout, theme, onToggleTheme }) {
   const student = state.students.find((s) => s.id === user.id);
@@ -67,21 +66,6 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
   // as inside TestsContent so a stale runningTestId can't slip past the gate.
   const testsUnlocked = canTakeTests(student);
   const parentLocked = isParentLockedForStudent(student);
-
-  // ParentLink calls this from a poll, so it must be referentially stable and
-  // must not write when nothing changed — otherwise the effect that owns the
-  // poll re-runs on every tick.
-  const markTelegramLinked = useCallback(() => {
-    setState((s) => {
-      const cur = s.students.find((x) => x.id === user.id);
-      if (!cur || cur.parentTgLinked) return s;
-      return {
-        ...s,
-        students: s.students.map((x) => (x.id === user.id ? { ...x, parentTgLinked: true } : x)),
-        users: s.users.map((u) => (u.id === user.id ? { ...u, parentTgLinked: true } : u)),
-      };
-    });
-  }, [setState, user.id]);
 
   function saveParentContact(fields) {
     const patch = { ...fields, parentAddedAt: new Date().toISOString() };
@@ -169,7 +153,6 @@ export default function StudentPanel({ state, setState, user, onLogout, theme, o
               student={student}
               locked={parentLocked}
               onSave={saveParentContact}
-              onTelegramLinked={markTelegramLinked}
             />
           </Page>
         </main>
@@ -433,7 +416,7 @@ function HomeContent({ student, myResults, perSubjectAvg, avg, attRate, state, p
 /* ============================================================
    PARENT CONTACT
    ============================================================ */
-function ParentContent({ student, locked, onSave, onTelegramLinked }) {
+function ParentContent({ student, locked, onSave }) {
   if (locked) {
     return (
       <div className="bento">
@@ -460,7 +443,19 @@ function ParentContent({ student, locked, onSave, onTelegramLinked }) {
 
         <ShellCard className="span-12">
           <div className="card-title"><h2>Telegram</h2></div>
-          <ParentLink student={student} onLinked={onTelegramLinked} />
+          {/* The link is minted by the teacher, not here: nothing in this
+              browser can prove which student it belongs to. See api/link-token.js. */}
+          <div className="tg-link">
+            <div className="tg-link-icon" aria-hidden="true">📨</div>
+            <div>
+              <b>Telegram ulanishini ustozingiz sozlaydi.</b>
+              <p>
+                Ota-onangiz test natijalaringizni, davomatingizni va to'lov eslatmalarini
+                Telegram orqali olishi mumkin. Buning uchun ustozingiz ota-onangizga
+                maxsus havola beradi — undan so'rang.
+              </p>
+            </div>
+          </div>
         </ShellCard>
       </div>
     );

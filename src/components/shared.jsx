@@ -135,6 +135,15 @@ export function IconPayment({ size }) {
   );
 }
 
+export function IconTelegram({ size }) {
+  return (
+    <IconSvg size={size}>
+      <path d="M43 7L4 21l15 5.5L43 7z" />
+      <path d="M43 7L28 41l-9-14.5L43 7z" />
+    </IconSvg>
+  );
+}
+
 // -------- Dashboard Navigation Card --------
 
 export function NavCard({ icon: Icon, title, subtitle, stat, foot, onClick, accent, delay = 0 }) {

@@ -30,7 +30,7 @@ Eski token chatga yozilgan, ya'ni u endi maxfiy emas.
 
 ## 3. Vercel'ga o'zgaruvchilarni kiriting
 
-Vercel → loyiha → **Settings → Environment Variables**. Beshtasi kerak:
+Vercel → loyiha → **Settings → Environment Variables**. Oltitasi kerak:
 
 | Nomi | Qiymati |
 |---|---|
@@ -39,12 +39,19 @@ Vercel → loyiha → **Settings → Environment Variables**. Beshtasi kerak:
 | `SUPABASE_URL` | Supabase Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role kaliti |
 | `VITE_TELEGRAM_BOT_USERNAME` | `Halimov_kursi_bot` |
+| `TEACHER_PANEL_PASSWORD` | Ustoz Telegram bo'limini ochadigan parol |
 
-`TELEGRAM_WEBHOOK_SECRET` uchun satr generatsiya qilish:
+`TELEGRAM_WEBHOOK_SECRET` va `TEACHER_PANEL_PASSWORD` uchun satr generatsiya qilish:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+
+> `TEACHER_PANEL_PASSWORD` — bu **saytga kirish paroli emas**. Ustoz uni faqat
+> "Telegram xabarnomasi" bo'limini ochish uchun bir marta kiritadi, keyin 30 kun
+> so'ralmaydi. Kamida 12 ta belgi bo'lishi shart, aks holda server bo'limni
+> umuman ochmaydi. Bu parol brauzerga hech qachon yuborilmaydi — butun himoya
+> shunga asoslangan, shuning uchun uni Telegramda yoki chatda yozmang.
 
 Kiritgandan keyin **qayta deploy qiling** — o'zgaruvchilar faqat yangi
 deploy'da kuchga kiradi.
@@ -74,11 +81,13 @@ curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 
 ## 5. Sinab ko'ring
 
-1. O'quvchi sifatida kiring → **Ota-ona** sahifasi → **Havola olish**
-2. Havolani o'z Telegramingizda oching → **Start** bosing
-3. "✅ Ulanish muvaffaqiyatli" xabari kelishi kerak
-4. Saytdagi holat 4 soniya ichida "ulangan" ga o'zgaradi
-5. Test topshiring → natija Telegramga kelishi kerak
+1. **Ustoz** sifatida kiring → **Telegram xabarnomasi** bo'limi
+2. `TEACHER_PANEL_PASSWORD` ni kiriting
+3. Istalgan o'quvchi qatoridan **Havola olish** ni bosing
+4. Havolani o'z Telegramingizda oching → **Start** bosing
+5. "✅ Ulanish muvaffaqiyatli" xabari kelishi kerak
+6. Jadvaldagi holat 4 soniya ichida "Ulangan" ga o'zgaradi
+7. O'sha o'quvchi sifatida kirib test topshiring → natija Telegramga kelishi kerak
 
 ---
 
@@ -108,6 +117,10 @@ ulanish oqimini faqat deploy qilingan saytda sinash mumkin.
 | Darsga kelmadi / kechikdi | Ustoz **Davomat** sahifasidagi tugmani bosganda |
 | To'lov eslatmasi | Ustoz **To'lovlar** sahifasidagi tugmani bosganda |
 
+Davomat va to'lov xabarlari ustoz sessiyasini talab qiladi. Agar tugmani
+bosganda "🔒 Avval Telegram xabarnomasi bo'limiga kirib parolni kiriting"
+chiqsa — 30 kunlik sessiya tugagan, parolni qayta kiriting.
+
 Xabar matni serverda, `api/_lib/messages.js` da yoziladi. Matnni o'zgartirish
 uchun o'sha faylni tahrirlang — brauzer faqat raqamlarni yuboradi.
 
@@ -115,17 +128,32 @@ Har bir o'quvchiga kuniga **20 ta** xabar chegarasi bor (`api/_lib/db.js`).
 
 ---
 
-## Bilib turishingiz kerak bo'lgan ikki zaiflik
+## Kim nimaga ruxsatli
 
-1. **`/api/notify` ni istalgan odam chaqira oladi.** Sayt kodi ochiq, server
-   tomonida sessiya yo'q. Zarar chegaralangan — matn serverda tayyor
-   shablonlardan yig'iladi va kunlik limit bor — lekin texnik bilimi bor odam
-   real o'quvchi nomidan soxta ball yubora oladi. To'liq yechim: natijalarni
-   serverga ko'chirish (3-bosqich).
+| Manzil | Kim chaqira oladi |
+|---|---|
+| `/api/teacher-session` | Hamma — lekin faqat to'g'ri parol sessiya beradi |
+| `/api/link-token` | Faqat ustoz sessiyasi bilan |
+| `/api/link-status` | Faqat ustoz sessiyasi bilan |
+| `/api/unlink` | Faqat ustoz sessiyasi bilan |
+| `/api/notify` (davomat, to'lov) | Faqat ustoz sessiyasi bilan |
+| `/api/notify` (test natijasi) | Ochiq — pastdagi izohga qarang |
+| `/api/telegram-webhook` | Faqat Telegram (maxfiy sarlavha orqali) |
+
+## Bilib turishingiz kerak bo'lgan zaifliklar
+
+1. **Test natijasi xabari ochiq qolgan.** U o'quvchi brauzeridan avtomatik
+   ketadi, brauzerda esa maxfiy kalit saqlab bo'lmaydi (sayt kodi ochiq).
+   Shuning uchun texnik bilimi bor odam ulangan ota-onaga soxta ball yubora
+   oladi. Zarari chegaralangan: matn serverdagi tayyor shablonlardan yig'iladi,
+   kunlik 20 ta limit bor, va soxta ball kelsa ota-ona farzandidan so'raydi.
+   Muhimi — **hech kim bola ma'lumotini o'qiy olmaydi**: ulanish faqat ustoz
+   orqali. To'liq yechim: natijalarni serverga ko'chirish (3-bosqich).
 
 2. **Parollar ochiq matnda.** Bir o'quvchi boshqasining paroli bilan kirib,
-   uning ota-onasiga xabar ketishiga sabab bo'lishi mumkin. Xabarnoma jiddiy
-   ishlatila boshlansa, avval auth ni tuzatish kerak.
+   uning nomidan test topshirishi mumkin. Bu Telegram muammosi emas, saytning
+   demo auth tizimi shunday. Xabarnoma jiddiy ishlatila boshlansa, keyingi
+   tuzatiladigan narsa shu.
 
 ## Ulanishni bekor qilish
 

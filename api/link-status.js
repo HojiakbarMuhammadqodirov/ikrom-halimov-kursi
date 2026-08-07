@@ -1,18 +1,32 @@
-import { getLink } from './_lib/db.js';
+import { getLink, listLinks } from './_lib/db.js';
+import { requireTeacher } from './_lib/session.js';
 
-// The page polls this after showing the deep link, so it can flip to
-// "ulandi ✅" as soon as the parent presses Start.
+// Who is linked. Two modes, both teacher-only:
+//   GET /api/link-status              → every link, for the Telegram page
+//   GET /api/link-status?studentId=x  → one, polled while a parent is pressing
+//                                       Start so the row can flip to "ulandi"
 //
-// Returns a boolean and the parent's Telegram display name only — never the
-// chat_id. The browser has no use for it and it is the one value that would
-// let a leaked frontend message a parent directly.
+// TEACHER-ONLY. Open, this answered "is s-1's parent linked, and what is that
+// parent called" to anybody who asked, for a guessable id. The chat_id is never
+// in the response either way — see listLinks().
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
+  if (!requireTeacher(req, res)) return;
 
   const studentId = String(req.query?.studentId || '').trim();
-  if (!studentId) return res.status(400).json({ error: 'bad_student_id' });
 
   try {
+    if (!studentId) {
+      const rows = await listLinks();
+      return res.status(200).json({
+        links: rows.map((r) => ({
+          studentId: r.student_id,
+          parentName: r.parent_name || null,
+          linkedAt: r.linked_at || null,
+        })),
+      });
+    }
+
     const link = await getLink(studentId);
     return res.status(200).json({
       linked: Boolean(link),
@@ -21,6 +35,15 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('link-status error', err);
-    return res.status(500).json({ error: 'server_error' });
+    // Setup diagnostics. Deliberately narrow: which env names are absent, the
+    // upstream HTTP status and the PostgREST error code — never a key, a value
+    // or a raw message. The schema is public in supabase/schema.sql anyway.
+    return res.status(500).json({
+      error: 'server_error',
+      stage: err.stage || 'unknown',
+      missing: err.missing,
+      status: err.status,
+      code: err.code,
+    });
   }
 }
